@@ -19,6 +19,14 @@ class qa_openai_admin
         switch ($option) {
             case 'openai_api_key':
                 return '';
+            case 'openai_answer_config_id':
+                return 7;
+            case 'openai_summary_config_id':
+                return 8;
+            case 'openai_summary_threshold':
+                return 5;
+            case 'openai_generate_min_level':
+                return QA_USER_LEVEL_ADMIN;
             default:
                 return null;
         }
@@ -50,7 +58,7 @@ class qa_openai_admin
                 INDEX idx_label (label)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
-            // Seed the 7 original configs
+            // Seed all configs (including answer generation and thread summary)
             $seeds = self::get_seed_configs();
             foreach ($seeds as $seed) {
                 $queries[] = "INSERT INTO $tablename (id, label, model, system_prompt, user_prompt, max_tokens, temperature)
@@ -62,9 +70,47 @@ class qa_openai_admin
                     . (int) $seed['max_tokens'] . ", "
                     . (float) $seed['temperature'] . ")";
             }
+        } else {
+            // Table exists — seed any configs that are missing by label
+            $new_labels = ['Answer generation', 'Thread summary'];
+            $seeds = self::get_seed_configs();
+            foreach ($seeds as $seed) {
+                if (in_array($seed['label'], $new_labels)) {
+                    $queries[] = "INSERT INTO $tablename (label, model, system_prompt, user_prompt, max_tokens, temperature)
+                        SELECT "
+                        . "'" . addslashes($seed['label']) . "', "
+                        . "'" . addslashes($seed['model']) . "', "
+                        . "'" . addslashes($seed['system_prompt']) . "', "
+                        . "'" . addslashes($seed['user_prompt']) . "', "
+                        . (int) $seed['max_tokens'] . ", "
+                        . (float) $seed['temperature']
+                        . " FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM $tablename WHERE label = '" . addslashes($seed['label']) . "')";
+                }
+            }
         }
 
+        // Ensure the cache table exists
+        self::ensure_cache_table($queries, $tableslc);
+
         return empty($queries) ? null : $queries;
+    }
+
+    /**
+     * Ensure the cache table exists. Called from init_queries.
+     */
+    private static function ensure_cache_table(&$queries, $tableslc)
+    {
+        $cache_table = qa_db_add_table_prefix('openai_cache');
+        if (!in_array($cache_table, $tableslc)) {
+            $queries[] = "CREATE TABLE IF NOT EXISTS $cache_table (
+                postid       INT UNSIGNED NOT NULL,
+                cache_type   VARCHAR(30)  NOT NULL DEFAULT 'summary',
+                content      MEDIUMTEXT   NOT NULL,
+                created      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (postid, cache_type),
+                INDEX idx_created (created)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+        }
     }
 
     /**
@@ -76,6 +122,10 @@ class qa_openai_admin
 
         if (qa_clicked('openai_save')) {
             qa_opt('openai_api_key', qa_post_text('openai_api_key'));
+            qa_opt('openai_answer_config_id', (int) qa_post_text('openai_answer_config_id'));
+            qa_opt('openai_summary_config_id', (int) qa_post_text('openai_summary_config_id'));
+            qa_opt('openai_summary_threshold', (int) qa_post_text('openai_summary_threshold'));
+            qa_opt('openai_generate_min_level', (int) qa_post_text('openai_generate_min_level'));
             $saved = true;
         }
 
@@ -89,6 +139,42 @@ class qa_openai_admin
                     'type'  => 'text',
                     'tags'  => 'name="openai_api_key" style="width:500px;"',
                     'value' => qa_opt('openai_api_key'),
+                ],
+                [
+                    'label' => 'Answer Generation Config ID:',
+                    'type'  => 'number',
+                    'tags'  => 'name="openai_answer_config_id"',
+                    'value' => qa_opt('openai_answer_config_id'),
+                    'note'  => 'Config ID from OpenAI Configs used for generating answers (default: 7)',
+                ],
+                [
+                    'label' => 'Thread Summary Config ID:',
+                    'type'  => 'number',
+                    'tags'  => 'name="openai_summary_config_id"',
+                    'value' => qa_opt('openai_summary_config_id'),
+                    'note'  => 'Config ID from OpenAI Configs used for thread summaries (default: 8)',
+                ],
+                [
+                    'label' => 'Summary Threshold:',
+                    'type'  => 'number',
+                    'tags'  => 'name="openai_summary_threshold"',
+                    'value' => qa_opt('openai_summary_threshold'),
+                    'note'  => 'Minimum number of answers or comments to show AI Summary button (default: 5)',
+                ],
+                [
+                    'label' => 'Generate Answer – Minimum User Level:',
+                    'type'  => 'select',
+                    'tags'  => 'name="openai_generate_min_level"',
+                    'options' => [
+                        QA_USER_LEVEL_EXPERT     => 'Expert',
+                        QA_USER_LEVEL_EDITOR     => 'Editor',
+                        QA_USER_LEVEL_MODERATOR  => 'Moderator',
+                        QA_USER_LEVEL_ADMIN      => 'Admin',
+                        QA_USER_LEVEL_SUPER      => 'Super Admin',
+                    ],
+                    'value' => (int) qa_opt('openai_generate_min_level'),
+                    'match_by' => 'key',
+                    'note'  => 'Minimum user level to see the "Generate AI Answer" button (default: Admin)',
                 ],
                 [
                     'type' => 'static',
@@ -163,6 +249,24 @@ class qa_openai_admin
                 'system_prompt' => 'You are a spam detection assistant for a Q&A website. Analyze the given post and determine whether it is spam or not. Your response MUST begin with exactly one of these two words: "SPAM" or "NOT SPAM", followed by a brief explanation. Spam includes: promotional content, irrelevant advertising, link farming, gibberish, or off-topic solicitations. Legitimate posts include: genuine questions, answers, or discussions related to academic or technical topics, even if poorly written.',
                 'user_prompt' => 'Please analyze this post for spam:\n\n{{ MESSAGE }}',
                 'max_tokens' => 300,
+                'temperature' => 0.3,
+            ],
+            [
+                'id' => 7,
+                'label' => 'Answer generation',
+                'model' => 'gpt-4o',
+                'system_prompt' => 'You are a knowledgeable assistant for a Q&A website focused on computer science, GATE exam preparation, and engineering topics. Generate a clear, accurate, and well-structured answer to the given question. Use proper formatting with paragraphs. If the question involves code, include relevant code snippets. If there are existing answers, provide additional value or a better explanation. Be precise and educational.',
+                'user_prompt' => '{{ MESSAGE }}',
+                'max_tokens' => 3000,
+                'temperature' => 0.5,
+            ],
+            [
+                'id' => 8,
+                'label' => 'Thread summary',
+                'model' => 'gpt-4o',
+                'system_prompt' => 'You are a concise summarizer for a Q&A discussion thread. Summarize the key points from the question, answers, and comments. Highlight the most important conclusions, areas of agreement, points of disagreement, and the best answer if one is apparent. Keep the summary informative but concise (3-8 sentences). Use clear, simple language.',
+                'user_prompt' => 'Please summarize this Q&A thread:\n\n{{ MESSAGE }}',
+                'max_tokens' => 1000,
                 'temperature' => 0.3,
             ],
         ];
