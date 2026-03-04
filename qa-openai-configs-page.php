@@ -131,7 +131,7 @@ class qa_openai_configs_page
         }
 
         $is_new = ($config === null);
-        $qa_content['title'] = $is_new ? 'Add OpenAI Config' : 'Edit OpenAI Config #' . (int) $id;
+        $qa_content['title'] = $is_new ? 'Add OpenAI Config' : 'Edit OpenAI Config: ' . qa_html($config['label']);
 
         $base = qa_path('admin/openai-configs');
         $form_action = $base;

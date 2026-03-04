@@ -71,20 +71,26 @@ class qa_openai_admin
                     . (float) $seed['temperature'] . ")";
             }
         } else {
-            // Table exists — seed any configs that are missing by label
+            // Table exists — seed any configs that are missing by label (check in PHP first to avoid re-init loop)
             $new_labels = ['Answer generation', 'Thread summary'];
-            $seeds = self::get_seed_configs();
-            foreach ($seeds as $seed) {
-                if (in_array($seed['label'], $new_labels)) {
-                    $queries[] = "INSERT INTO $tablename (label, model, system_prompt, user_prompt, max_tokens, temperature)
-                        SELECT "
-                        . "'" . addslashes($seed['label']) . "', "
-                        . "'" . addslashes($seed['model']) . "', "
-                        . "'" . addslashes($seed['system_prompt']) . "', "
-                        . "'" . addslashes($seed['user_prompt']) . "', "
-                        . (int) $seed['max_tokens'] . ", "
-                        . (float) $seed['temperature']
-                        . " FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM $tablename WHERE label = '" . addslashes($seed['label']) . "')";
+            $existing = qa_db_read_all_values(
+                qa_db_query_sub('SELECT label FROM ^openai_configs WHERE label IN ($, $)', ...$new_labels)
+            );
+            $missing = array_diff($new_labels, $existing);
+
+            if (!empty($missing)) {
+                $seeds = self::get_seed_configs();
+                foreach ($seeds as $seed) {
+                    if (in_array($seed['label'], $missing)) {
+                        $queries[] = "INSERT INTO $tablename (label, model, system_prompt, user_prompt, max_tokens, temperature)
+                            VALUES ("
+                            . "'" . addslashes($seed['label']) . "', "
+                            . "'" . addslashes($seed['model']) . "', "
+                            . "'" . addslashes($seed['system_prompt']) . "', "
+                            . "'" . addslashes($seed['user_prompt']) . "', "
+                            . (int) $seed['max_tokens'] . ", "
+                            . (float) $seed['temperature'] . ")";
+                    }
                 }
             }
         }
@@ -131,6 +137,15 @@ class qa_openai_admin
 
         $config_url = qa_path('admin/openai-configs');
 
+        // Build label-based dropdown options from the DB
+        $config_options = [];
+        $config_rows = qa_db_read_all_assoc(
+            qa_db_query_sub('SELECT id, label FROM ^openai_configs ORDER BY label')
+        );
+        foreach ($config_rows as $crow) {
+            $config_options[(int) $crow['id']] = $crow['label'];
+        }
+
         return [
             'ok'     => $saved ? 'Settings saved.' : null,
             'fields' => [
@@ -141,18 +156,22 @@ class qa_openai_admin
                     'value' => qa_opt('openai_api_key'),
                 ],
                 [
-                    'label' => 'Answer Generation Config ID:',
-                    'type'  => 'number',
+                    'label' => 'Answer Generation Config:',
+                    'type'  => 'select',
                     'tags'  => 'name="openai_answer_config_id"',
-                    'value' => qa_opt('openai_answer_config_id'),
-                    'note'  => 'Config ID from OpenAI Configs used for generating answers (default: 7)',
+                    'options' => $config_options,
+                    'value' => (int) qa_opt('openai_answer_config_id'),
+                    'match_by' => 'key',
+                    'note'  => 'Prompt config used for generating answers',
                 ],
                 [
-                    'label' => 'Thread Summary Config ID:',
-                    'type'  => 'number',
+                    'label' => 'Thread Summary Config:',
+                    'type'  => 'select',
                     'tags'  => 'name="openai_summary_config_id"',
-                    'value' => qa_opt('openai_summary_config_id'),
-                    'note'  => 'Config ID from OpenAI Configs used for thread summaries (default: 8)',
+                    'options' => $config_options,
+                    'value' => (int) qa_opt('openai_summary_config_id'),
+                    'match_by' => 'key',
+                    'note'  => 'Prompt config used for thread summaries',
                 ],
                 [
                     'label' => 'Summary Threshold:',
@@ -234,7 +253,7 @@ class qa_openai_admin
                 'temperature' => 0.7,
             ],
             [
-                'id' => 5,
+                'id' => 6,
                 'label' => 'GATE motivational quote',
                 'model' => 'gpt-4o',
                 'system_prompt' => 'Our audience is Engineering students preparing for GATE examination in February 2027.',
@@ -243,7 +262,7 @@ class qa_openai_admin
                 'temperature' => 0.7,
             ],
             [
-                'id' => 6,
+                'id' => 7,
                 'label' => 'Spam detection',
                 'model' => 'gpt-4o',
                 'system_prompt' => 'You are a spam detection assistant for a Q&A website. Analyze the given post and determine whether it is spam or not. Your response MUST begin with exactly one of these two words: "SPAM" or "NOT SPAM", followed by a brief explanation. Spam includes: promotional content, irrelevant advertising, link farming, gibberish, or off-topic solicitations. Legitimate posts include: genuine questions, answers, or discussions related to academic or technical topics, even if poorly written.',
@@ -252,7 +271,7 @@ class qa_openai_admin
                 'temperature' => 0.3,
             ],
             [
-                'id' => 7,
+                'id' => 8,
                 'label' => 'Answer generation',
                 'model' => 'gpt-4o',
                 'system_prompt' => 'You are a knowledgeable assistant for a Q&A website focused on computer science, GATE exam preparation, and engineering topics. Generate a clear, accurate, and well-structured answer to the given question. Use proper formatting with paragraphs. If the question involves code, include relevant code snippets. If there are existing answers, provide additional value or a better explanation. Be precise and educational.',
@@ -261,7 +280,7 @@ class qa_openai_admin
                 'temperature' => 0.5,
             ],
             [
-                'id' => 8,
+                'id' => 9,
                 'label' => 'Thread summary',
                 'model' => 'gpt-4o',
                 'system_prompt' => 'You are a concise summarizer for a Q&A discussion thread. Summarize the key points from the question, answers, and comments. Highlight the most important conclusions, areas of agreement, points of disagreement, and the best answer if one is apparent. Keep the summary informative but concise (3-8 sentences). Use clear, simple language.',
