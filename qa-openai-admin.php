@@ -27,6 +27,10 @@ class qa_openai_admin
                 return 5;
             case 'openai_generate_min_level':
                 return QA_USER_LEVEL_ADMIN;
+            case 'openai_gemini_api_key':
+                return '';
+            case 'openai_claude_api_key':
+                return '';
             default:
                 return null;
         }
@@ -132,6 +136,8 @@ class qa_openai_admin
             qa_opt('openai_summary_config_id', (int) qa_post_text('openai_summary_config_id'));
             qa_opt('openai_summary_threshold', (int) qa_post_text('openai_summary_threshold'));
             qa_opt('openai_generate_min_level', (int) qa_post_text('openai_generate_min_level'));
+            qa_opt('openai_gemini_api_key', trim(qa_post_text('openai_gemini_api_key')));
+            qa_opt('openai_claude_api_key', trim(qa_post_text('openai_claude_api_key')));
             $saved = true;
         }
 
@@ -194,6 +200,20 @@ class qa_openai_admin
                     'value' => (int) qa_opt('openai_generate_min_level'),
                     'match_by' => 'key',
                     'note'  => 'Minimum user level to see the "Generate AI Answer" button (default: Admin)',
+                ],
+                [
+                    'label' => 'Gemini API Key:',
+                    'type'  => 'text',
+                    'tags'  => 'name="openai_gemini_api_key" style="width:500px;" placeholder="AIza..."',
+                    'value' => qa_opt('openai_gemini_api_key'),
+                    'note'  => 'For configs using Gemini models (e.g. gemini-2.5-flash). <a href="https://aistudio.google.com/apikey" target="_blank">Get key from Google AI Studio</a>',
+                ],
+                [
+                    'label' => 'Claude (Anthropic) API Key:',
+                    'type'  => 'text',
+                    'tags'  => 'name="openai_claude_api_key" style="width:500px;" placeholder="sk-ant-..."',
+                    'value' => qa_opt('openai_claude_api_key'),
+                    'note'  => 'For Claude models (e.g. claude-sonnet-4-20250514). <a href="https://console.anthropic.com/settings/keys" target="_blank">Get key from Anthropic Console</a>',
                 ],
                 [
                     'type' => 'static',

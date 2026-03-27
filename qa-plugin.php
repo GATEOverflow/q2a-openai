@@ -20,6 +20,9 @@ qa_register_plugin_module('page', 'qa-openai-configs-page.php', 'qa_openai_confi
 // Register AJAX page handler for AI answer generation & summary
 qa_register_plugin_module('page', 'qa-openai-ajax.php', 'qa_openai_ajax_page', 'OpenAI AJAX Handler');
 
+// Register LLM answer validation page
+qa_register_plugin_module('page', 'qa-openai-validate.php', 'qa_openai_validate_page', 'OpenAI LLM Validation');
+
 // Register theme layer for question page UI (Generate Answer button + AI Summary)
 qa_register_plugin_layer('qa-openai-layer.php', 'OpenAI Layer');
 

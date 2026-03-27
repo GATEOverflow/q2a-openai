@@ -146,7 +146,7 @@ class qa_openai_configs_page
         $html .= '<table style="width:100%; max-width:800px; border-collapse:collapse;">';
 
         $html .= $this->form_row('Label', 'text', 'config_label', $val('label'), 'A short human-readable name');
-        $html .= $this->form_row('Model', 'text', 'config_model', $val('model', 'gpt-4o'), 'e.g. gpt-4o, gpt-3.5-turbo');
+        $html .= $this->form_row('Model', 'text', 'config_model', $val('model', 'gpt-4o'), 'e.g. gpt-4o, gpt-4o-mini, gemini-2.5-flash, gemini-2.5-pro');
         $html .= $this->form_row('Max Tokens', 'number', 'config_max_tokens', $val('max_tokens', 2000));
         $html .= $this->form_row('Temperature', 'text', 'config_temperature', $val('temperature', '0.70'), '0.0 – 2.0');
 
