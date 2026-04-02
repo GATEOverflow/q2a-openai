@@ -99,6 +99,43 @@ class qa_html_theme_layer extends qa_html_theme_base
     color: #c62828;
     font-weight: bold;
 }
+/* Dark mode support: Polaris uses [data-theme="dark"], MayroPro uses body.dark-theme / prefers-color-scheme */
+[data-theme="dark"] .qa-openai-summary-wrap,
+body.dark-theme .qa-openai-summary-wrap {
+    background: #1e1e2f;
+    border-color: #3949ab;
+}
+[data-theme="dark"] .qa-openai-summary-content,
+body.dark-theme .qa-openai-summary-content {
+    background: #2a2a3c;
+    color: #e0e0e0;
+}
+[data-theme="dark"] .qa-openai-summary-wrap h3,
+body.dark-theme .qa-openai-summary-wrap h3 {
+    color: #7986cb;
+}
+[data-theme="dark"] .qa-openai-generate-wrap,
+body.dark-theme .qa-openai-generate-wrap {
+    background: #1e2e2a;
+    border-color: #388e6c;
+}
+@media (prefers-color-scheme: dark) {
+    body:not(.light-theme) .qa-openai-summary-wrap {
+        background: #1e1e2f;
+        border-color: #3949ab;
+    }
+    body:not(.light-theme) .qa-openai-summary-content {
+        background: #2a2a3c;
+        color: #e0e0e0;
+    }
+    body:not(.light-theme) .qa-openai-summary-wrap h3 {
+        color: #7986cb;
+    }
+    body:not(.light-theme) .qa-openai-generate-wrap {
+        background: #1e2e2a;
+        border-color: #388e6c;
+    }
+}
 .qa-openai-spinner {
     display: inline-block;
     width: 16px;
@@ -386,14 +423,15 @@ class qa_html_theme_layer extends qa_html_theme_base
     }
 
     function typesetMathJax(el) {
-        if (typeof MathJax !== "undefined") {
+        // KaTeX: use global typeset() exposed by mathjax plugin layer
+        if (typeof typeset === "function") {
+            typeset(function() { return [el]; });
+        } else if (typeof MathJax !== "undefined") {
             if (typeof MathJax.typesetPromise === "function") {
-                // MathJax v3
                 MathJax.typesetPromise([el]).catch(function(err) {
                     console.warn("MathJax typeset error:", err);
                 });
             } else if (MathJax.Hub && typeof MathJax.Hub.Queue === "function") {
-                // MathJax v2
                 MathJax.Hub.Queue(["Typeset", MathJax.Hub, el]);
             }
         }
