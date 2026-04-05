@@ -341,6 +341,13 @@ body.dark-theme .qa-openai-generate-wrap {
 
     // ── Helper: fill the Q2A answer editor ──
     function fillAnswerEditor(text) {
+        // Convert markdown to HTML if the pupi-dmc converter is available
+        if (typeof pupi_dm_markdownToHtml === "function" && typeof pupi_dm_looksLikeMarkdown === "function") {
+            if (pupi_dm_looksLikeMarkdown(text)) {
+                text = pupi_dm_markdownToHtml(text);
+            }
+        }
+
         var anewEl = document.getElementById("anew");
         var formVisible = anewEl && anewEl.offsetParent !== null;
 

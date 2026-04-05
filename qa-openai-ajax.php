@@ -82,10 +82,23 @@ class qa_openai_ajax_page
         $title = isset($question['title']) ? $question['title'] : '';
         $content = isset($question['content']) ? $question['content'] : '';
 
+        // Extract image URLs before stripping HTML
+        $image_urls = array();
+        if (preg_match_all('/<img\b[^>]*\bsrc\s*=\s*["\']([^"\']+)["\'][^>]*>/i', $content, $matches)) {
+            $image_urls = $matches[1];
+        }
+
         // Strip HTML tags for cleaner input
         $content_text = strip_tags($content);
 
         $message = "Question Title: " . $title . "\n\n" . "Question Content:\n" . $content_text;
+
+        if (!empty($image_urls)) {
+            $message .= "\n\n--- Images in Question ---\n";
+            foreach ($image_urls as $i => $url) {
+                $message .= "Image " . ($i + 1) . ": " . $url . "\n";
+            }
+        }
 
         // Also include existing answers for context (if any)
         $answers = qa_db_read_all_assoc(
@@ -121,7 +134,7 @@ class qa_openai_ajax_page
             return;
         }
 
-        $result = openai_call($message, $config_id);
+        $result = openai_call($message, $config_id, $image_urls);
 
         if (strpos($result, 'Error:') === 0 || strpos($result, 'cURL error:') === 0 || strpos($result, 'OpenAI API error:') === 0) {
             echo json_encode(['success' => false, 'error' => $result]);

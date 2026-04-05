@@ -20,7 +20,7 @@ if (!function_exists('openai_call')) {
      * @param  int    $configid  The config row id from ^openai_configs
      * @return string            The assistant's reply text, or an error string
      */
-    function openai_call($message, $configid = 1)
+    function openai_call($message, $configid = 1, $image_urls = array())
     {
         // Load config from DB
         $config = qa_db_read_one_assoc(
@@ -48,16 +48,16 @@ if (!function_exists('openai_call')) {
 
         // Route to the appropriate provider based on model name
         if (stripos($model, 'gemini') === 0) {
-            return _openai_call_gemini($model, $system_prompt, $user_content, $max_tokens, $temperature);
+            return _openai_call_gemini($model, $system_prompt, $user_content, $max_tokens, $temperature, $image_urls);
         }
 
-        return _openai_call_openai($model, $system_prompt, $user_content, $max_tokens, $temperature);
+        return _openai_call_openai($model, $system_prompt, $user_content, $max_tokens, $temperature, $image_urls);
     }
 
     /**
      * Call OpenAI Chat Completions API.
      */
-    function _openai_call_openai($model, $system_prompt, $user_content, $max_tokens, $temperature)
+    function _openai_call_openai($model, $system_prompt, $user_content, $max_tokens, $temperature, $image_urls = array())
     {
         $apiKey = qa_opt('openai_api_key');
         if (empty($apiKey)) {
@@ -66,11 +66,25 @@ if (!function_exists('openai_call')) {
 
         $url = 'https://api.openai.com/v1/chat/completions';
 
+        // Build user message content — multimodal if images present
+        if (!empty($image_urls)) {
+            $content_parts = [['type' => 'text', 'text' => $user_content]];
+            foreach ($image_urls as $img_url) {
+                $content_parts[] = [
+                    'type' => 'image_url',
+                    'image_url' => ['url' => $img_url],
+                ];
+            }
+            $user_message = ['role' => 'user', 'content' => $content_parts];
+        } else {
+            $user_message = ['role' => 'user', 'content' => $user_content];
+        }
+
         $data = [
             'model'       => $model,
             'messages'    => [
                 ['role' => 'system', 'content' => $system_prompt],
-                ['role' => 'user',   'content' => $user_content],
+                $user_message,
             ],
             'max_tokens'  => $max_tokens,
             'temperature' => $temperature,
@@ -112,7 +126,7 @@ if (!function_exists('openai_call')) {
     /**
      * Call Google Gemini generateContent API.
      */
-    function _openai_call_gemini($model, $system_prompt, $user_content, $max_tokens, $temperature)
+    function _openai_call_gemini($model, $system_prompt, $user_content, $max_tokens, $temperature, $image_urls = array())
     {
         $apiKey = qa_opt('openai_gemini_api_key');
         if (empty($apiKey)) {
@@ -121,6 +135,23 @@ if (!function_exists('openai_call')) {
 
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . urlencode($model) . ':generateContent?key=' . urlencode($apiKey);
 
+        // Build user parts — text + images
+        $user_parts = [['text' => $user_content]];
+
+        if (!empty($image_urls)) {
+            foreach ($image_urls as $img_url) {
+                $image_data = _openai_fetch_image_base64($img_url);
+                if ($image_data) {
+                    $user_parts[] = [
+                        'inlineData' => [
+                            'mimeType' => $image_data['mime'],
+                            'data'     => $image_data['base64'],
+                        ],
+                    ];
+                }
+            }
+        }
+
         $data = [
             'systemInstruction' => [
                 'parts' => [['text' => $system_prompt]],
@@ -128,7 +159,7 @@ if (!function_exists('openai_call')) {
             'contents' => [
                 [
                     'role'  => 'user',
-                    'parts' => [['text' => $user_content]],
+                    'parts' => $user_parts,
                 ],
             ],
             'generationConfig' => [
@@ -165,5 +196,51 @@ if (!function_exists('openai_call')) {
         }
 
         return 'Gemini: unexpected response – ' . mb_substr($response, 0, 500);
+    }
+
+    /**
+     * Fetch an image from a URL and return base64-encoded data with MIME type.
+     * Returns array with 'mime' and 'base64' keys, or null on failure.
+     */
+    function _openai_fetch_image_base64($url)
+    {
+        $curl = curl_init($url);
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($curl, CURLOPT_TIMEOUT, 15);
+        curl_setopt($curl, CURLOPT_MAXREDIRS, 3);
+        curl_setopt($curl, CURLOPT_USERAGENT, 'Mozilla/5.0');
+
+        $data = curl_exec($curl);
+        $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $content_type = curl_getinfo($curl, CURLINFO_CONTENT_TYPE);
+        curl_close($curl);
+
+        if ($data === false || $http_code !== 200 || empty($data)) {
+            return null;
+        }
+
+        // Determine MIME type
+        $mime = 'image/png';
+        if ($content_type && strpos($content_type, 'image/') === 0) {
+            $mime = explode(';', $content_type)[0];
+        } else {
+            // Detect from data
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $detected = $finfo->buffer($data);
+            if ($detected && strpos($detected, 'image/') === 0) {
+                $mime = $detected;
+            }
+        }
+
+        // Limit size to 10MB
+        if (strlen($data) > 10 * 1024 * 1024) {
+            return null;
+        }
+
+        return [
+            'mime'   => $mime,
+            'base64' => base64_encode($data),
+        ];
     }
 }
