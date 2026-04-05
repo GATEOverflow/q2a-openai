@@ -85,7 +85,9 @@ class qa_openai_ajax_page
         // Extract image URLs before stripping HTML
         $image_urls = array();
         if (preg_match_all('/<img\b[^>]*\bsrc\s*=\s*["\']([^"\']+)["\'][^>]*>/i', $content, $matches)) {
-            $image_urls = $matches[1];
+            foreach ($matches[1] as $url) {
+                $image_urls[] = html_entity_decode($url, ENT_QUOTES, 'UTF-8');
+            }
         }
 
         // Strip HTML tags for cleaner input
