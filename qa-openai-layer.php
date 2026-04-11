@@ -64,6 +64,12 @@ class qa_html_theme_layer extends qa_html_theme_base
     font-size: 15px;
     color: #3949ab;
 }
+.qa-openai-summary-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
 .qa-openai-summary-toggle {
     display: inline-block;
     padding: 6px 14px;
@@ -73,7 +79,6 @@ class qa_html_theme_layer extends qa_html_theme_base
     border-radius: 4px;
     cursor: pointer;
     font-size: 13px;
-    margin-bottom: 8px;
 }
 .qa-openai-summary-toggle:hover {
     background: #303f9f;
@@ -84,7 +89,7 @@ class qa_html_theme_layer extends qa_html_theme_base
 }
 .qa-openai-summary-content {
     display: none;
-    margin-top: 8px;
+    margin-top: 0;
     padding: 10px;
     background: #fff;
     border-radius: 4px;
@@ -94,6 +99,47 @@ class qa_html_theme_layer extends qa_html_theme_base
 }
 .qa-openai-summary-content.loaded {
     display: block;
+}
+.qa-openai-copy-btn {
+    display: none;
+    padding: 5px;
+    background: transparent;
+    color: #666;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1;
+}
+.qa-openai-copy-btn svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+.qa-openai-copy-btn:hover {
+    background: rgba(0,0,0,0.08);
+    color: #333;
+}
+.qa-openai-copy-btn.visible {
+    display: inline-flex;
+    align-items: center;
+}
+.qa-openai-toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #323232;
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    z-index: 99999;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+.qa-openai-toast.show {
+    opacity: 1;
 }
 .qa-openai-error {
     color: #c62828;
@@ -109,6 +155,15 @@ body.dark-theme .qa-openai-summary-wrap {
 body.dark-theme .qa-openai-summary-content {
     background: #2a2a3c;
     color: #e0e0e0;
+}
+[data-theme="dark"] .qa-openai-copy-btn,
+body.dark-theme .qa-openai-copy-btn {
+    color: #bbb;
+}
+[data-theme="dark"] .qa-openai-copy-btn:hover,
+body.dark-theme .qa-openai-copy-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
 }
 [data-theme="dark"] .qa-openai-summary-wrap h3,
 body.dark-theme .qa-openai-summary-wrap h3 {
@@ -127,6 +182,13 @@ body.dark-theme .qa-openai-generate-wrap {
     body:not(.light-theme) .qa-openai-summary-content {
         background: #2a2a3c;
         color: #e0e0e0;
+    }
+    body:not(.light-theme) .qa-openai-copy-btn {
+        color: #bbb;
+    }
+    body:not(.light-theme) .qa-openai-copy-btn:hover {
+        background: rgba(255,255,255,0.1);
+        color: #fff;
     }
     body:not(.light-theme) .qa-openai-summary-wrap h3 {
         color: #7986cb;
@@ -219,9 +281,14 @@ body.dark-theme .qa-openai-generate-wrap {
             $postid = isset($q_view['raw']['postid']) ? (int) $q_view['raw']['postid'] : 0;
             if ($postid > 0) {
                 $this->output('<div class="qa-openai-summary-wrap">');
+                $this->output('<div class="qa-openai-summary-header">');
                 $this->output('<button type="button" class="qa-openai-summary-toggle" id="qa-openai-summary-btn" data-postid="' . $postid . '">');
                 $this->output('&#x1F4DD; Show AI Summary');
                 $this->output('</button>');
+                $this->output('<button type="button" class="qa-openai-copy-btn" id="qa-openai-copy-btn" title="Copy summary">');
+                $this->output('<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"/></svg>');
+                $this->output('</button>');
+                $this->output('</div>');
                 $this->output('<div class="qa-openai-summary-content" id="qa-openai-summary-content"></div>');
                 $this->output('</div>');
             }
@@ -290,12 +357,18 @@ body.dark-theme .qa-openai-generate-wrap {
         summaryBtn.addEventListener("click", function() {
             var contentEl = document.getElementById("qa-openai-summary-content");
 
+            var copyBtn = document.getElementById("qa-openai-copy-btn");
+
             if (summaryLoaded) {
                 // Toggle visibility
                 contentEl.classList.toggle("loaded");
-                summaryBtn.textContent = contentEl.classList.contains("loaded")
+                var isVisible = contentEl.classList.contains("loaded");
+                summaryBtn.textContent = isVisible
                     ? "\uD83D\uDCDD Hide AI Summary"
                     : "\uD83D\uDCDD Show AI Summary";
+                if (copyBtn) {
+                    copyBtn.classList.toggle("visible", isVisible);
+                }
                 return;
             }
 
@@ -318,6 +391,7 @@ body.dark-theme .qa-openai-generate-wrap {
                                 typesetMathJax(contentEl);
                                 summaryBtn.textContent = "\uD83D\uDCDD Hide AI Summary";
                                 summaryLoaded = true;
+                                if (copyBtn) copyBtn.classList.add("visible");
                             } else {
                                 contentEl.innerHTML = "<span class=\"qa-openai-error\">" + escHtml(resp.error || "Unknown error") + "</span>";
                                 contentEl.classList.add("loaded");
@@ -427,6 +501,38 @@ body.dark-theme .qa-openai-generate-wrap {
             // Form is already visible — editor should be loaded
             setEditorData();
         }
+    }
+
+    // ── Copy Summary button ──
+    var copyBtnEl = document.getElementById("qa-openai-copy-btn");
+    if (copyBtnEl) {
+        copyBtnEl.addEventListener("click", function() {
+            var contentEl = document.getElementById("qa-openai-summary-content");
+            if (!contentEl) return;
+            var text = contentEl.innerText || contentEl.textContent;
+            navigator.clipboard.writeText(text.trim()).then(function() {
+                showToast("Copied!");
+            }, function() {
+                showToast("Failed to copy");
+            });
+        });
+    }
+
+    function showToast(msg) {
+        var existing = document.getElementById("qa-openai-toast");
+        if (existing) existing.remove();
+        var toast = document.createElement("div");
+        toast.id = "qa-openai-toast";
+        toast.className = "qa-openai-toast";
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        // Trigger reflow then show
+        toast.offsetHeight;
+        toast.classList.add("show");
+        setTimeout(function() {
+            toast.classList.remove("show");
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 2000);
     }
 
     function typesetMathJax(el) {
